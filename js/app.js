@@ -20,7 +20,8 @@ let configSistema = JSON.parse(localStorage.getItem("configSistema")) || {
         porta: "COM3", 
         portaAlternativa: "COM4",
         baudRate: 4800,
-        protocolo: "toledo_standard"
+        protocolo: "toledo_standard",
+        simulado: true
     },
     empresa: { nome: "Mercadinho Morezine", cnpj: "", endereco: "" }
 };
@@ -391,6 +392,11 @@ if (relatorioDiagnostico.length > 0) {
     
     document.getElementById("estoque-search-btn").addEventListener("click", buscarProdutoEstoque);
     
+    // Adicionar evento para pesquisa com Enter no campo de estoque
+    document.getElementById("estoque-search").addEventListener("keypress", (e) => {
+        if (e.key === "Enter") buscarProdutoEstoque();
+    });
+    
     // Modais
     document.querySelectorAll(".close, .close-modal").forEach(el => {
         el.addEventListener("click", () => {
@@ -406,6 +412,7 @@ if (relatorioDiagnostico.length > 0) {
     // Balança
     document.getElementById("ler-balanca").addEventListener("click", lerBalanca);
     document.getElementById("add-balanca-item").addEventListener("click", adicionarItemBalanca);
+    atualizarIndicadorSimulador();
     
     // Permitir entrada manual de peso com Enter
     document.getElementById("balanca-peso").addEventListener("keypress", (e) => {
@@ -659,7 +666,6 @@ function lerBalanca() {
     // Desabilitar botão e mostrar que está lendo
     botaoLer.disabled = true;
     botaoLer.textContent = "Lendo...";
-    campoPeso.value = "";
     
     // Simular tempo de leitura da balança (1-2 segundos)
     setTimeout(() => {
@@ -669,48 +675,63 @@ function lerBalanca() {
             const modeloBalanca = configBalanca?.modelo || "toledo";
             const porta = configBalanca?.porta || "COM3";
             const baudRate = configBalanca?.baudRate || 4800;
-            
+            const simulado = !!configBalanca?.simulado;
+            // Ajustar texto do botão conforme modo
+            botaoLer.textContent = simulado ? "Simulando..." : "Aguardando...";
+
             console.log(`Tentando ler balança ${modeloBalanca} na porta ${porta} (${baudRate} bps)...`);
-            
-            // Simular leitura específica para Toledo Prix 3
-            let peso;
-            if (modeloBalanca === "toledo_prix3") {
-                // Toledo Prix 3: precisão de 5g, capacidade até 15kg
-                // Simular peso mais realista com incrementos de 5g
-                const pesoBase = Math.random() * 15; // 0 a 15kg
-                peso = (Math.round(pesoBase * 200) / 200).toFixed(3); // Arredondar para 5g (0.005kg)
-                
-                // Simular possível instabilidade da balança (peso oscilando)
-                if (Math.random() < 0.1) { // 10% de chance de instabilidade
-                    campoPeso.value = "-----";
-                    setTimeout(() => {
-                        campoPeso.value = peso;
-                        campoPeso.style.backgroundColor = "#e8f5e8";
-                        setTimeout(() => campoPeso.style.backgroundColor = "", 1000);
-                    }, 500);
-                    console.log(`Toledo Prix 3: Peso instável, estabilizando... ${peso}kg`);
-                    return;
+
+            if (simulado) {
+                // Bloquear entrada manual/teclado da balança enquanto simula
+                campoPeso.readOnly = true;
+                campoPeso.blur();
+                campoPeso.value = "";
+
+                // Simular leitura específica para Toledo Prix 3
+                let peso;
+                if (modeloBalanca === "toledo_prix3") {
+                    // Toledo Prix 3: precisão de 5g, capacidade até 15kg
+                    // Simular peso mais realista com incrementos de 5g
+                    const pesoBase = Math.random() * 15; // 0 a 15kg
+                    peso = (Math.round(pesoBase * 200) / 200).toFixed(3); // Arredondar para 5g (0.005kg)
+
+                    // Simular possível instabilidade da balança (peso oscilando)
+                    if (Math.random() < 0.1) { // 10% de chance de instabilidade
+                        campoPeso.value = "-----";
+                        setTimeout(() => {
+                            campoPeso.value = peso;
+                            campoPeso.style.backgroundColor = "#e8f5e8";
+                            setTimeout(() => campoPeso.style.backgroundColor = "", 1000);
+                        }, 500);
+                        console.log(`Toledo Prix 3: Peso instável, estabilizando... ${peso}kg`);
+                        return;
+                    }
+                } else if (modeloBalanca === "toledo") {
+                    // Toledo genérico (0.1kg a 10kg)
+                    peso = (0.1 + Math.random() * 9.9).toFixed(3);
+                } else if (modeloBalanca === "filizola") {
+                    // Filizola (0.05kg a 15kg)
+                    peso = (0.05 + Math.random() * 14.95).toFixed(3);
+                } else {
+                    // Simulação genérica (0.1kg a 5kg)
+                    peso = (0.1 + Math.random() * 4.9).toFixed(3);
                 }
-            } else if (modeloBalanca === "toledo") {
-                // Toledo genérico (0.1kg a 10kg)
-                peso = (0.1 + Math.random() * 9.9).toFixed(3);
-            } else if (modeloBalanca === "filizola") {
-                // Filizola (0.05kg a 15kg)
-                peso = (0.05 + Math.random() * 14.95).toFixed(3);
+
+                campoPeso.value = peso;
+
+                // Feedback visual de sucesso
+                campoPeso.style.backgroundColor = "#e8f5e8";
+                setTimeout(() => {
+                    campoPeso.style.backgroundColor = "";
+                }, 1000);
+
+                console.log(`Peso lido da balança ${modeloBalanca} (${porta}, ${baudRate} bps): ${peso}kg`);
             } else {
-                // Simulação genérica (0.1kg a 5kg)
-                peso = (0.1 + Math.random() * 4.9).toFixed(3);
+                // Modo real: não escrever no campo, permitir que a balança (HID/COM via app) preencha
+                console.log("Modo real ativado. Em ambiente web, a leitura direta de portas COM não é acessível; se sua balança atua como 'teclado', mantenha o campo focado para digitar automaticamente.");
+                // Indicar visualmente que está aguardando a leitura real
+                campoPeso.placeholder = "Aguardando leitura da balança (real)...";
             }
-            
-            campoPeso.value = peso;
-            
-            // Feedback visual de sucesso
-            campoPeso.style.backgroundColor = "#e8f5e8";
-            setTimeout(() => {
-                campoPeso.style.backgroundColor = "";
-            }, 1000);
-            
-            console.log(`Peso lido da balança ${modeloBalanca} (${porta}, ${baudRate} bps): ${peso}kg`);
             
         } catch (error) {
              console.error("Erro ao ler balança:", error);
@@ -732,6 +753,9 @@ function lerBalanca() {
             // Reabilitar botão
             botaoLer.disabled = false;
             botaoLer.textContent = "Ler da Balança";
+            // Restaurar estado do campo
+            campoPeso.readOnly = false;
+            campoPeso.placeholder = "";
         }
     }, 1000 + Math.random() * 1000); // 1-2 segundos de delay
 }
@@ -838,16 +862,47 @@ function carregarProdutos() {
 }
 
 function buscarProdutoEstoque() {
-    const busca = document.getElementById("estoque-search").value.toLowerCase();
-    const produtosFiltrados = produtos.filter(p => 
-        p.nome.toLowerCase().includes(busca) || 
-        p.id.includes(busca)
+    const buscaInput = document.getElementById("estoque-search");
+    const buscaRaw = buscaInput.value.trim();
+    const busca = buscaRaw.toLowerCase();
+
+    // Se a busca estiver vazia, mostrar mensagem para digitar
+    if (busca === "") {
+        const tbody = document.getElementById("products-body");
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align: center; color: #999; padding: 30px; font-style: italic;">
+                    Digite o nome ou código do produto para pesquisar...
+                </td>
+            </tr>
+        `;
+        // Limpa o campo de busca mesmo ao exibir a mensagem
+        buscaInput.value = "";
+        return;
+    }
+
+    const produtosFiltrados = produtos.filter(p =>
+        p.nome.toLowerCase().includes(busca) ||
+        String(p.id).toLowerCase().includes(busca)
     );
-    
+
     const tbody = document.getElementById("products-body");
     tbody.innerHTML = "";
-    
-    produtosFiltrados.forEach((produto, index) => {
+
+    if (produtosFiltrados.length === 0) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td colspan="6" style="text-align: center; color: #666; padding: 20px;">
+                Nenhum produto encontrado para "${buscaRaw}"
+            </td>
+        `;
+        tbody.appendChild(tr);
+        // Limpa o campo de busca quando não há resultados
+        buscaInput.value = "";
+        return;
+    }
+
+    produtosFiltrados.forEach((produto) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
             <td>${produto.id}</td>
@@ -866,6 +921,9 @@ function buscarProdutoEstoque() {
         `;
         tbody.appendChild(tr);
     });
+
+    // Limpar o campo de busca após concluir a pesquisa
+    buscaInput.value = "";
 }
 
 function editarProduto(index) {
@@ -1018,9 +1076,13 @@ function carregarConfiguracoes() {
     document.getElementById("balanca-port").value = configSistema.balanca.porta;
     document.getElementById("balanca-port-alt").value = configSistema.balanca.portaAlternativa || "COM4";
     document.getElementById("balanca-baudrate").value = configSistema.balanca.baudRate || 4800;
+    const chkSimulado = document.getElementById("balanca-simulado");
+    if (chkSimulado) chkSimulado.checked = !!configSistema.balanca.simulado;
     document.getElementById("empresa-nome").value = configSistema.empresa.nome;
     document.getElementById("empresa-cnpj").value = configSistema.empresa.cnpj;
     document.getElementById("empresa-endereco").value = configSistema.empresa.endereco;
+
+    atualizarIndicadorSimulador();
 }
 
 function salvarConfiguracoes() {
@@ -1034,7 +1096,8 @@ function salvarConfiguracoes() {
             porta: document.getElementById("balanca-port").value,
             portaAlternativa: document.getElementById("balanca-port-alt").value,
             baudRate: parseInt(document.getElementById("balanca-baudrate").value),
-            protocolo: "toledo_standard"
+            protocolo: "toledo_standard",
+            simulado: !!document.getElementById("balanca-simulado")?.checked
         },
         empresa: {
             nome: document.getElementById("empresa-nome").value,
@@ -1045,6 +1108,21 @@ function salvarConfiguracoes() {
     
     salvarDadosAutomaticamente("configSistema", configSistema);
     alert("Configurações da balança Toledo Prix 3 salvas com sucesso!\nPorta: " + configSistema.balanca.porta + "\nVelocidade: " + configSistema.balanca.baudRate + " bps");
+
+    atualizarIndicadorSimulador();
+}
+
+function atualizarIndicadorSimulador() {
+    const indicador = document.getElementById("balanca-simulador-indicador");
+    if (!indicador) return;
+    const ativo = !!configSistema?.balanca?.simulado;
+    if (ativo) {
+        indicador.textContent = "Simulador ativo: pesos gerados automaticamente.";
+        indicador.style.color = "#2e7d32";
+    } else {
+        indicador.textContent = "Leitura real (COM): simulação temporária no ambiente web.";
+        indicador.style.color = "#6a1b9a";
+    }
 }
 
 // Função de impressão
